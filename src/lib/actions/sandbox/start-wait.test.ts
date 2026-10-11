@@ -361,4 +361,43 @@ describe("sandbox readiness container identity boundary", () => {
     expect(output).not.toContain("\u001b");
     expect(output).toContain('openshell.ai/sandbox-workspace="other\\\\u001b[31mworkspace"');
   });
+
+  it("names the foreign workspace instead of a longer timeout when readiness times out (#12799)", async () => {
+    const harness = unmatchedIdentityHarness({
+      listOutputs: ["alpha Provisioning"],
+      sandboxNameLabeledContainers: observed([FOREIGN_WORKSPACE]),
+    });
+    vi.spyOn(Date, "now").mockReturnValueOnce(0).mockReturnValue(120_001);
+
+    await expect(harness.waitForSandboxReadyOrExit("alpha")).rejects.toThrow(EXIT_ONE);
+
+    const output = harness.errorSpy.mock.calls.flat().join("\n");
+    expect(output).toContain("Timed out after 120s waiting for sandbox 'alpha'.");
+    expect(output).toContain(
+      "No Docker container matches sandbox 'alpha' in the default OpenShell workspace.",
+    );
+    expect(output).toContain('openshell.ai/sandbox-workspace="other-workspace"');
+    expect(output).toContain("Then rerun 'nemoclaw alpha connect'.");
+    expect(output).not.toContain("NEMOCLAW_CONNECT_TIMEOUT");
+    expect(output).not.toContain("Check: openshell sandbox list");
+  });
+
+  it("keeps the timeout override hint when readiness times out for a matched container (#12799)", async () => {
+    const harness = unmatchedIdentityHarness({
+      listOutputs: ["alpha Provisioning"],
+      dockerRuntime: { containerName: "openshell-alpha", running: true },
+      sandboxNameLabeledContainers: observed([FOREIGN_WORKSPACE]),
+    });
+    vi.spyOn(Date, "now").mockReturnValueOnce(0).mockReturnValue(120_001);
+
+    await expect(harness.waitForSandboxReadyOrExit("alpha")).rejects.toThrow(EXIT_ONE);
+
+    const output = harness.errorSpy.mock.calls.flat().join("\n");
+    expect(output).toContain("Check: openshell sandbox list");
+    expect(output).toContain(
+      "Override timeout: NEMOCLAW_CONNECT_TIMEOUT=300 nemoclaw alpha connect",
+    );
+    expect(output).not.toContain("No Docker container matches");
+    expect(harness.inspectSandboxNameLabeledContainersSpy).not.toHaveBeenCalled();
+  });
 });

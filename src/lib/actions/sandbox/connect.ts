@@ -2097,10 +2097,19 @@ export async function waitForSandboxReadyOrExit(
     const suggestedTimeout = Math.max(300, timeout * 2);
     console.error("");
     console.error(`  Timed out after ${timeout}s waiting for sandbox '${sandboxName}'.`);
-    console.error("  Check: openshell sandbox list");
-    console.error(
-      `  Override timeout: NEMOCLAW_CONNECT_TIMEOUT=${suggestedTimeout} ${CLI_NAME} ${sandboxName} ${retryCommand}`,
-    );
+    // A container that NemoClaw refused to match never becomes ready, so a
+    // longer timeout cannot help. Name that boundary instead (#12799).
+    const identityLines = allowDockerRuntimeInspection
+      ? unmatchedSandboxContainerLines(sandboxName, `${CLI_NAME} ${sandboxName} ${retryCommand}`)
+      : null;
+    if (identityLines) {
+      for (const line of identityLines) console.error(`  ${line}`);
+    } else {
+      console.error("  Check: openshell sandbox list");
+      console.error(
+        `  Override timeout: NEMOCLAW_CONNECT_TIMEOUT=${suggestedTimeout} ${CLI_NAME} ${sandboxName} ${retryCommand}`,
+      );
+    }
     process.exit(1);
   }
   console.log(`\r    Status: ${"Ready".padEnd(20)} (${elapsedSec()}s elapsed)`);
